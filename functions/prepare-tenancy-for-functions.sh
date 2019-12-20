@@ -1,17 +1,24 @@
 # shell script using OCI CLI to prepare OCI tenancy for Functions
+# see docs: 
+# https://docs.cloud.oracle.com/iaas/Content/Functions/Tasks/functionsconfiguringtenancies.htm
+# https://docs.cloud.oracle.com/iaas/Content/Functions/Tasks/functionscreatingpolicies.htm
 
 FN_COMPARTMENT_NAME=functions-compartment
+FN_DEVS_GROUP=FN_DEVELOPERS
 FN_VCN_NAME=fn-vcn
 FN_IGW_NAME=internet-gateway-fn
 FN_MANAGE_REPOS_POLICY=fn-repos-management
 FN_MANAGE_APP_POLICY=fn-app-management
+FN_GROUP_USE_VCN_POLICY=fn-group-use-network-family
+FN_FAAS_USE_VCN_POLICY=fn-faas-use-network-family
+FN_FAAS_READ_REPOS_POLICY=fn-faas-read-repos
 
 oci() { docker run --rm --mount type=bind,source=$HOME/.oci,target=/root/.oci stephenpearson/oci-cli:latest "$@"; }
 
 ROOT_COMPARTMENT_OCID=$1
 
 # create a dedicated compartment for Functions
-CREATE_FN_COMP="false"
+CREATE_FN_COMP="true"
 if [ $CREATE_FN_COMP = "true" ]
 then
   echo "creating $FN_COMPARTMENT_NAME"
@@ -74,8 +81,7 @@ else
 fi
 
 # create group FN_DEVELOPERS
-FN_DEVS_GROUP=FN_DEVELOPERS
-CREATE_GROUP="false"
+CREATE_GROUP="true"
 if [ $CREATE_GROUP = "true" ]
 then
   oci iam group create --name $FN_DEVS_GROUP --compartment-id $ROOT_COMPARTMENT_OCID  --description "Group for users who develop Function resources"
@@ -88,3 +94,11 @@ oci iam policy create  --name $FN_MANAGE_REPOS_POLICY --compartment-id $ROOT_COM
 
 oci iam policy create  --name $FN_MANAGE_APP_POLICY --compartment-id $FN_COMPARTMENT_OCID  --statements "[ \"Allow group $FN_DEVS_GROUP to manage functions-family in compartment functions-compartment\",
 \"Allow group $FN_DEVS_GROUP to read metrics in compartment functions-compartment\"]" --description "policy for granting rights to $FN_DEVS_GROUP to manage Function Apps in compartment $FN_COMPARTMENT_NAME"
+
+echo creating policy $FN_GROUP_USE_VCN_POLICY
+oci iam policy create  --name $FN_GROUP_USE_VCN_POLICY --compartment-id $FN_COMPARTMENT_OCID  --statements "[ \"Allow group $FN_DEVS_GROUP to use virtual-network-family in compartment $FN_COMPARTMENT_NAME\"]"  --description "Create a Policy to Give Oracle Functions Users Access to Network Resources in compartment $FN_COMPARTMENT_NAME"
+echo creating policy $FN_FAAS_USE_VCN_POLICY
+oci iam policy create  --name $FN_FAAS_USE_VCN_POLICY --compartment-id $ROOT_COMPARTMENT_OCID  --statements "[ \"Allow service FaaS to use virtual-network-family in compartment $FN_COMPARTMENT_NAME\"]"  --description "Create a Policy to Give the Oracle Functions Service Access to Network Resources"
+echo creating policy $FN_FAAS_READ_REPOS_POLICY
+oci iam policy create  --name $FN_FAAS_READ_REPOS_POLICY --compartment-id $ROOT_COMPARTMENT_OCID  --statements "[ \"Allow service FaaS to read repos in tenancy\"]"  --description "Create a Policy to Give the Oracle Functions Service Access to Repositories in Oracle Cloud Infrastructure Registry"
+

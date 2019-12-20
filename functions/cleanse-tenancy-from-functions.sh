@@ -1,15 +1,19 @@
 # shell script using OCI CLI to remove Functions specific resources from OCI tenancy
-# * TODO remove policies
-# * TODO remove group
+# * remove policies
+# * remove group
 # * remove Internet Gateway
 # * remove VCN
 # * remove special Functions Compartment
 
 FN_COMPARTMENT_NAME=functions-compartment
+FN_DEVS_GROUP=FN_DEVELOPERS
 FN_VCN_NAME=fn-vcn
 FN_IGW_NAME=internet-gateway-fn
 FN_MANAGE_REPOS_POLICY=fn-repos-management
 FN_MANAGE_APP_POLICY=fn-app-management
+FN_GROUP_USE_VCN_POLICY=fn-group-use-network-family
+FN_FAAS_USE_VCN_POLICY=fn-faas-use-network-family
+FN_FAAS_READ_REPOS_POLICY=fn-faas-read-repos
 
 oci() { docker run --rm --mount type=bind,source=$HOME/.oci,target=/root/.oci stephenpearson/oci-cli:latest "$@"; }
 
@@ -50,12 +54,55 @@ FN_POLICY_OCID=$(get_policy_id $FN_MANAGE_REPOS_POLICY $ROOT_COMPARTMENT_OCID)
 echo "Found policy $FN_POLICY_OCID"
 oci iam policy delete  --policy-id $FN_POLICY_OCID --force
 
+# remove policy $FN_GROUP_USE_VCN_POLICY
+echo "Removing policy $FN_GROUP_USE_VCN_POLICY"
+echo "get_policy_id $FN_GROUP_USE_VCN_POLICY $FN_COMPARTMENT_OCID"
+FN_POLICY_OCID=$(get_policy_id $FN_GROUP_USE_VCN_POLICY $FN_COMPARTMENT_OCID)
+echo "Found policy $FN_POLICY_OCID"
+oci iam policy delete  --policy-id $FN_POLICY_OCID --force
+
+# remove policy $FN_FAAS_USE_VCN_POLICY
+echo "Removing policy $FN_FAAS_USE_VCN_POLICY"
+echo "get_policy_id $FN_FAAS_USE_VCN_POLICY $ROOT_COMPARTMENT_OCID"
+FN_POLICY_OCID=$(get_policy_id $FN_FAAS_USE_VCN_POLICY $ROOT_COMPARTMENT_OCID)
+echo "Found policy $FN_POLICY_OCID"
+oci iam policy delete  --policy-id $FN_POLICY_OCID --force
+
+# remove policy $FN_FAAS_READ_REPOS_POLICY
+echo "Removing policy $FN_FAAS_READ_REPOS_POLICY"
+echo "get_policy_id $FN_FAAS_READ_REPOS_POLICY $ROOT_COMPARTMENT_OCID"
+FN_POLICY_OCID=$(get_policy_id $FN_FAAS_READ_REPOS_POLICY $ROOT_COMPARTMENT_OCID)
+echo "Found policy $FN_POLICY_OCID"
+oci iam policy delete  --policy-id $FN_POLICY_OCID --force
+
 # remove policy $FN_MANAGE_APP_POLICY
 echo "Removing policy $FN_MANAGE_APP_POLICY"
 echo "get_policy_id $FN_MANAGE_APP_POLICY $FN_COMPARTMENT_OCID"
 FN_POLICY_OCID=$(get_policy_id $FN_MANAGE_APP_POLICY $FN_COMPARTMENT_OCID)
 echo "Found policy $FN_POLICY_OCID"
 oci iam policy delete  --policy-id $FN_POLICY_OCID --force
+
+
+# find group OCID
+# invoke this function with two arguments:
+# 1. name of group
+# 2. compartment ocid to find group in
+get_group_id()
+{
+  GROUP_NAME_VAR=$1
+  COMPARTMENT_OCID_VAR=$2     
+
+  groups=$(oci iam group list  --compartment-id $COMPARTMENT_OCID_VAR --all)
+  local THE_GROUP_ID=$(echo $groups | jq -r --arg group_name "$GROUP_NAME_VAR" '.data | map(select(.name == $group_name)) | .[0] | .id')
+  # this line provides the output from this function; this output can be captured in a variable by the caller using VAR=`function param1`  
+  echo "$THE_GROUP_ID"
+}
+
+# remove group
+echo "Removing group $FN_DEVS_GROUP"
+echo "get_group_id $FN_DEVS_GROUP $ROOT_COMPARTMENT_OCID"
+FN_GROUP_OCID=$(get_group_id $FN_DEVS_GROUP $ROOT_COMPARTMENT_OCID)
+oci iam group delete --group-id $FN_GROUP_OCID --force 
 
 
 # find VCN OCID
